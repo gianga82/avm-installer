@@ -21,22 +21,13 @@ INSTALLER_VERSION="2.0.0"
 BOOTSTRAP_VERSION="1.0.0"
 BASE_URL="https://raw.githubusercontent.com/gianga82/avm-installer/main"
 
-# ─── Module flags (Legacy-Kompatibilität) ────────────────────────────────────
-OPT_DOCKER=false
-OPT_COMPOSE=false
-OPT_MCP=false
-OPT_OPENCODE=false
-OPT_OLLAMA=false
-OPT_OPENWEBUI=false
-OPT_NPM=false
-OPT_TAILSCALE=false
-OPT_WATCHTOWER=false
-OPT_MONITORING=false
+# ─── Module flags (dynamisch aus Registry befüllt) ───────────────────────────
 OPT_HOSTNAME=""
 OPT_SSH_PORT=""
 OPT_USER="root"
 OPT_AUTO_UPDATE=false
 OPT_CONFIG=""
+OPT_FLAG_COUNT=0      # Zählt gesetzte Modul-Flags für has_flags-Prüfung
 
 # ─── Zielverzeichnis / Registry ──────────────────────────────────────────────
 AVM_TARGET_DIR="${AVM_TARGET_DIR:-/opt/avm}"
@@ -130,7 +121,7 @@ reg_status()    { echo "${REG_STATUS[${1}]:-unknown}"; }
 reg_depends()   { echo "${REG_DEPENDS[${1}]:-}"; }
 reg_visible()   { echo "${REG_VISIBLE[${1}]:-true}"; }
 
-# ─── Hilfe ──────────────────────────────────────────────────────────────────
+# ─── Hilfe (dynamisch aus Registry) ─────────────────────────────────────────
 
 usage() {
   cat <<EOF
@@ -142,8 +133,17 @@ Usage:
 
 Options:
   --config FILE           Lade Konfiguration aus JSON-Datei
+EOF
+
+  if [ ${#REGISTRY_KEYS[@]} -gt 0 ]; then
+    for key in "${REGISTRY_KEYS[@]}"; do
+      local title="${REG_TITLE[${key}]:-${key}}"
+      local flag="${key//_/-}"
+      printf "  --%-22s Install %s\n" "${flag}" "${title}"
+    done
+  else
+    cat <<INNER
   --docker                Install Docker & Compose
-  --docker-compose        Install Docker Compose plugin
   --mcp                   Install MCP Server
   --opencode              Install OpenCode
   --ollama                Install Ollama
@@ -152,6 +152,10 @@ Options:
   --tailscale             Install Tailscale
   --watchtower            Install Watchtower
   --monitoring            Install Monitoring
+INNER
+  fi
+
+  cat <<EOF
   --hostname NAME         Set server hostname
   --ssh-port PORT         Set SSH port (default: 22)
   --user NAME             Set admin user (default: root)
@@ -161,7 +165,7 @@ EOF
   exit 0
 }
 
-# ─── install_config.json einlesen ────────────────────────────────────────────
+# ─── install_config.json einlesen (dynamisch über Registry) ──────────────────
 
 load_config() {
   local config_file="$1"
@@ -181,57 +185,74 @@ load_config() {
   OPT_USER="$(python3 -c "import json; print(json.load(open('${config_file}')).get('user','root'))" 2>/dev/null || echo "root")"
   OPT_AUTO_UPDATE="$(python3 -c "import json; print(json.load(open('${config_file}')).get('auto_update',False))" 2>/dev/null || echo "False")"
 
+  # Lade Registry, damit REGISTRY_KEYS bekannt ist
+  load_registry || true
+
   local modules_json
   modules_json="$(python3 -c "
 import json, sys
 c = json.load(open('${config_file}'))
 m = c.get('modules', {})
 for k, v in m.items():
-    sys.stdout.write(f'{k}={v}\n')
+    # Unterstützt sowohl 'docker': true als auch 'docker': {'install': true}
+    if isinstance(v, bool):
+        sys.stdout.write(f'{k}={str(v).lower()}\n')
+    elif isinstance(v, dict):
+        sys.stdout.write(f'{k}={str(v.get(\"install\", False)).lower()}\n')
 " 2>/dev/null || true)"
 
+  # Dynamisch OPT_<KEY> setzen für jedes Modul in der Config
+  local avail_keys=()
+  if [ ${#REGISTRY_KEYS[@]} -gt 0 ]; then
+    avail_keys=("${REGISTRY_KEYS[@]}")
+  else
+    # Fallback falls Registry nicht geladen werden konnte
+    avail_keys=(docker docker_compose mcp opencode ollama openwebui \
+                nginx_proxy_manager tailscale watchtower monitoring)
+  fi
+
+  # Alle Registry-Keys initial auf false setzen
+  for key in "${avail_keys[@]}"; do
+    local var_name="OPT_${key^^}"
+    eval "${var_name}=false"
+  done
+
+  # Gelesene Module auf true setzen
   while IFS='=' read -r key val; do
     [ -z "${key}" ] && continue
-    val="${val,,}"
-    case "${key}" in
-      docker)              [ "${val}" = "true" ] && OPT_DOCKER=true ;;
-      docker_compose)      [ "${val}" = "true" ] && OPT_COMPOSE=true ;;
-      mcp)                 [ "${val}" = "true" ] && OPT_MCP=true ;;
-      opencode)            [ "${val}" = "true" ] && OPT_OPENCODE=true ;;
-      ollama)              [ "${val}" = "true" ] && OPT_OLLAMA=true ;;
-      openwebui)           [ "${val}" = "true" ] && OPT_OPENWEBUI=true ;;
-      nginx_proxy_manager) [ "${val}" = "true" ] && OPT_NPM=true ;;
-      tailscale)           [ "${val}" = "true" ] && OPT_TAILSCALE=true ;;
-      watchtower)          [ "${val}" = "true" ] && OPT_WATCHTOWER=true ;;
-      monitoring)          [ "${val}" = "true" ] && OPT_MONITORING=true ;;
-    esac
+    val="$(echo "${val}" | tr '[:upper:]' '[:lower:]' | xargs)"
+    if [ "${val}" = "true" ] || [ "${val}" = "1" ]; then
+      local var_name="OPT_${key^^}"
+      eval "${var_name}=true"
+    fi
   done <<< "${modules_json}"
 
   echo -e " ${CHECK} ${GREEN}Installationskonfiguration geladen: ${config_file}${NC}"
 }
 
-# ─── CLI-Parameter parsen (Legacy) ──────────────────────────────────────────
+# ─── CLI-Parameter parsen (dynamisch über Registry) ─────────────────────────
 
 parse_args() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --help|-h) usage ;;
       --config)      OPT_CONFIG="$2"; shift ;;
-      --docker)      OPT_DOCKER=true ;;
-      --docker-compose) OPT_COMPOSE=true ;;
-      --mcp)         OPT_MCP=true ;;
-      --opencode)    OPT_OPENCODE=true ;;
-      --ollama)      OPT_OLLAMA=true ;;
-      --openwebui)   OPT_OPENWEBUI=true ;;
-      --nginx-proxy-manager) OPT_NPM=true ;;
-      --tailscale)   OPT_TAILSCALE=true ;;
-      --watchtower)  OPT_WATCHTOWER=true ;;
-      --monitoring)  OPT_MONITORING=true ;;
       --hostname)    OPT_HOSTNAME="$2"; shift ;;
       --ssh-port)    OPT_SSH_PORT="$2"; shift ;;
       --user)        OPT_USER="$2"; shift ;;
       --auto-update) OPT_AUTO_UPDATE=true ;;
-      *) echo -e " ${YELLOW}⚠ Unbekanntes Flag: $1${NC}" >&2 ;;
+      --*)
+        # --name → OPT_NAME=true
+        local raw="${1#--}"
+        raw="${raw//-/_}"
+        local var_name="OPT_${raw^^}"
+        if [[ "${raw}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+          eval "${var_name}=true"
+          OPT_FLAG_COUNT=$((OPT_FLAG_COUNT + 1))
+        else
+          echo -e " ${YELLOW}⚠ Unbekanntes Flag: $1${NC}" >&2
+        fi
+        ;;
     esac
     shift
   done
@@ -267,26 +288,31 @@ is_module_enabled() {
   echo "${!var_name:-false}"
 }
 
-# ─── Abhängigkeiten auflösen ────────────────────────────────────────────────
+# ─── Abhängigkeiten auflösen (dynamisch über Registry) ──────────────────────
 
 resolve_dependencies() {
   local auto_enabled=()
 
-  # docker_compose → docker
-  if [ "${OPT_COMPOSE}" = true ] && [ "${OPT_DOCKER}" = false ]; then
-    OPT_DOCKER=true
-    auto_enabled+=("docker")
-    echo -e " ${INFO_SYM} ${CYAN}Docker Compose → Docker automatisch aktiviert${NC}"
-    _log "DEPENDENCY: docker_compose → docker auto-enabled"
-  fi
-
-  # openwebui → docker
-  if [ "${OPT_OPENWEBUI}" = true ] && [ "${OPT_DOCKER}" = false ]; then
-    OPT_DOCKER=true
-    auto_enabled+=("docker")
-    echo -e " ${INFO_SYM} ${CYAN}Open WebUI → Docker automatisch aktiviert${NC}"
-    _log "DEPENDENCY: openwebui → docker auto-enabled"
-  fi
+  for key in "${REGISTRY_KEYS[@]}"; do
+    local var_name="OPT_${key^^}"
+    if [ "${!var_name:-false}" != "true" ]; then
+      continue
+    fi
+    local deps
+    deps="$(reg_depends "${key}")"
+    [ -z "${deps}" ] && continue
+    IFS='|' read -ra dep_list <<< "${deps}"
+    for dep_id in "${dep_list[@]}"; do
+      [ -z "${dep_id}" ] && continue
+      local dep_var="OPT_${dep_id^^}"
+      if [ "${!dep_var:-false}" != "true" ]; then
+        eval "${dep_var}=true"
+        auto_enabled+=("${dep_id}")
+        echo -e " ${INFO_SYM} ${CYAN}${key} → ${dep_id} automatisch aktiviert${NC}"
+        _log "DEPENDENCY: ${key} → ${dep_id} auto-enabled"
+      fi
+    done
+  done
 
   echo "${auto_enabled[@]}"
 }
@@ -520,7 +546,7 @@ install_selected_modules() {
   return "${failed_count}"
 }
 
-# ─── Legacy: Direkte CLI-Flags ohne --config ────────────────────────────────
+# ─── Legacy: Direkte CLI-Flags ohne --config (dynamisch aus Registry) ───────
 
 run_legacy_cli() {
   echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -530,30 +556,38 @@ run_legacy_cli() {
 
   _log "Legacy CLI: direkte Installation mit Flags"
 
+  # Registry laden falls noch nicht geschehen
+  if [ ${#REGISTRY_KEYS[@]} -eq 0 ]; then
+    load_registry || true
+  fi
+
   local tmp_config
   tmp_config="$(mktemp)"
 
-  cat > "${tmp_config}" << CFGEOF
-{
-  "version": 1,
-  "hostname": "${OPT_HOSTNAME}",
-  "ssh_port": ${OPT_SSH_PORT},
-  "user": "${OPT_USER}",
-  "auto_update": ${OPT_AUTO_UPDATE},
-  "modules": {
-    "docker": ${OPT_DOCKER},
-    "docker_compose": ${OPT_COMPOSE},
-    "mcp": ${OPT_MCP},
-    "opencode": ${OPT_OPENCODE},
-    "ollama": ${OPT_OLLAMA},
-    "openwebui": ${OPT_OPENWEBUI},
-    "nginx_proxy_manager": ${OPT_NPM},
-    "tailscale": ${OPT_TAILSCALE},
-    "watchtower": ${OPT_WATCHTOWER},
-    "monitoring": ${OPT_MONITORING}
-  }
-}
-CFGEOF
+  # Dynamisches JSON aus Registry-Keys bauen
+  local json_modules="{"
+  local sep=""
+  local avail_keys=()
+  if [ ${#REGISTRY_KEYS[@]} -gt 0 ]; then
+    avail_keys=("${REGISTRY_KEYS[@]}")
+  else
+    avail_keys=(docker docker_compose mcp opencode ollama openwebui \
+                nginx_proxy_manager tailscale watchtower monitoring)
+  fi
+  for key in "${avail_keys[@]}"; do
+    local var_name="OPT_${key^^}"
+    local val="${!var_name:-false}"
+    json_modules+="${sep}\n    \"${key}\": ${val}"
+    sep=","
+  done
+  json_modules+="\n  }"
+
+  printf '{\n  "version": 1,\n  "hostname": "%s",\n  "ssh_port": %s,\n  "user": "%s",\n  "auto_update": %s,\n  "modules": %s\n}\n' \
+    "${OPT_HOSTNAME}" \
+    "${OPT_SSH_PORT:-22}" \
+    "${OPT_USER}" \
+    "${OPT_AUTO_UPDATE}" \
+    "${json_modules}" > "${tmp_config}"
 
   OPT_CONFIG="${tmp_config}"
   _log "Temporäre Config erzeugt: ${tmp_config}"
@@ -581,17 +615,7 @@ main() {
     install_selected_modules
     local exit_code=$?
   else
-    local has_flags=false
-    if [ "${OPT_DOCKER}" = true ] || [ "${OPT_COMPOSE}" = true ] || \
-       [ "${OPT_MCP}" = true ] || [ "${OPT_OPENCODE}" = true ] || \
-       [ "${OPT_OLLAMA}" = true ] || [ "${OPT_OPENWEBUI}" = true ] || \
-       [ "${OPT_NPM}" = true ] || [ "${OPT_TAILSCALE}" = true ] || \
-       [ "${OPT_WATCHTOWER}" = true ] || [ "${OPT_MONITORING}" = true ] || \
-       [ -n "${OPT_HOSTNAME}" ]; then
-      has_flags=true
-    fi
-
-    if [ "${has_flags}" = true ]; then
+    if [ "${OPT_FLAG_COUNT}" -gt 0 ] || [ -n "${OPT_HOSTNAME}" ]; then
       run_legacy_cli
       local exit_code=$?
     else

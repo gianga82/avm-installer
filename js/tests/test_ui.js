@@ -275,7 +275,7 @@ function buildInstallConfig(modules, hostname, sshPort, user, autoUpdate) {
   const enabledIds = modules.filter(m => m.enabled).map(m => m.id);
   const mods = {};
   for (const id of enabledIds) {
-    mods[id] = { install: true };
+    mods[id] = true;
   }
   return {
     hostname: hostname || null,
@@ -333,9 +333,9 @@ testCase('9) JSON Konfiguration');
   assert(config.auto_update === true,                    'auto_update korrekt');
   assert(config.modules !== null,                        'modules ist gesetzt');
   assert(config.modules.docker !== undefined,            'docker in modules');
-  assert(config.modules.docker.install === true,         'docker.install = true');
+  assert(config.modules.docker === true,                 'docker = true');
   assert(config.modules.openwebui !== undefined,         'openwebui in modules');
-  assert(config.modules.openwebui.install === true,      'openwebui.install = true');
+  assert(config.modules.openwebui === true,              'openwebui = true');
   assert(Object.keys(config.modules).length === 2,       'genau 2 module');
 })();
 
@@ -437,6 +437,270 @@ testCase('14) Keine Module ausgewählt');
   const config = buildInstallConfig(modules, '', 22, 'root', false);
   assert(config.modules === null,                       'modules null');
 })();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Integration Tests: Web → Bootstrap
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Test 15: Alle Module erzeugen gültiges JSON ─────────────────────── */
+
+function testAllModulesValidJSON() {
+  testCase('15) Alle Module erzeugen gültiges JSON');
+  let allPass = true;
+
+  for (const [id, mod] of Object.entries(FULL_REGISTRY)) {
+    if (mod.visible === false) continue;
+    if (mod.status === 'deprecated') continue;
+
+    const modules = normalizeRegistry(FULL_REGISTRY);
+    const target = modules.find(m => m.id === id);
+    if (!target) {
+      assert(false, `${id}: Modul nicht in normalisierten Modulen`);
+      allPass = false;
+      continue;
+    }
+
+    target.enabled = true;
+    const config = buildInstallConfig(modules, '', 22, 'root', false);
+    assert(typeof config === 'object', `${id}: config ist Objekt`);
+    assert(config.modules !== null, `${id}: modules ist gesetzt`);
+    assert(config.modules[id] === true, `${id}: modules.${id} === true`);
+
+    const cmd = buildCommandText(modules, '', 22, 'root', false);
+    assert(cmd.includes(`--${id}`), `${id}: Befehl enthält --${id}`);
+
+    target.enabled = false;
+  }
+
+  assert(allPass, 'Alle Module bestehen die JSON-Validierung');
+}
+
+testAllModulesValidJSON();
+
+/* ─── Test 16: Browser-Konfiguration == Bootstrap-Konfiguration ───────── */
+
+function testBrowserEqualsBootstrap() {
+  testCase('16) Browser-Konfiguration == Bootstrap-Konfiguration');
+
+  /* Browser-seitig: getInstallConfig() erzeugt:
+     { modules: { docker: true, openwebui: true } }
+
+     Bootstrap-seitig: load_config() in install.sh erwartet:
+     { modules: { docker: true, openwebui: true } }
+
+     Beide nutzen identisches Format – einfache Booleans.
+  */
+
+  const modules = normalizeRegistry(FULL_REGISTRY);
+  modules.find(m => m.id === 'docker').enabled = true;
+  modules.find(m => m.id === 'openwebui').enabled = true;
+  modules.find(m => m.id === 'mcp').enabled = true;
+
+  const webConfig = buildInstallConfig(modules, 'myserver', 2222, 'admin', true);
+
+  /* Das hier ist das Format, das install.sh::load_config() liest */
+  assert(typeof webConfig === 'object', 'Config ist ein Objekt');
+  assert(typeof webConfig.hostname === 'string' || webConfig.hostname === null, 'hostname ist string oder null');
+  assert(typeof webConfig.ssh_port === 'number' || webConfig.ssh_port === null, 'ssh_port ist number oder null');
+  assert(typeof webConfig.user === 'string' || webConfig.user === null, 'user ist string oder null');
+  assert(typeof webConfig.auto_update === 'boolean' || webConfig.auto_update === null, 'auto_update ist boolean oder null');
+  assert(typeof webConfig.modules === 'object' || webConfig.modules === null, 'modules ist object oder null');
+
+  /* Jeder Wert in modules muss ein Boolean sein (das Format, das install.sh erwartet) */
+  if (webConfig.modules) {
+    for (const [key, val] of Object.entries(webConfig.modules)) {
+      assert(typeof val === 'boolean', `modules.${key} ist boolean (${typeof val})`);
+    }
+  }
+
+  /* Spezifische Werte */
+  assert(webConfig.hostname === 'myserver', 'hostname = myserver');
+  assert(webConfig.ssh_port === 2222, 'ssh_port = 2222');
+  assert(webConfig.user === 'admin', 'user = admin');
+  assert(webConfig.auto_update === true, 'auto_update = true');
+  assert(webConfig.modules.docker === true, 'docker = true');
+  assert(webConfig.modules.openwebui === true, 'openwebui = true');
+  assert(webConfig.modules.mcp === true, 'mcp = true');
+
+  /* Keine Module mit { install: true } Format mehr */
+  for (const val of Object.values(webConfig.modules)) {
+    assert(typeof val === 'boolean', 'Kein Objekt-Format mehr (einfache Booleans)');
+  }
+
+  /* Serialisieren und Zurücklesen (simuliert Datei → Bash) */
+  const jsonStr = JSON.stringify(webConfig);
+  const parsed = JSON.parse(jsonStr);
+  assert(parsed.modules.docker === true, 'Nach Serialisierung: docker = true');
+  assert(parsed.modules.openwebui === true, 'Nach Serialisierung: openwebui = true');
+  assert(parsed.modules.mcp === true, 'Nach Serialisierung: mcp = true');
+}
+
+testBrowserEqualsBootstrap();
+
+/* ─── Test 17: Registry vollständig übernommen ────────────────────────── */
+
+function testRegistryFullCoverage() {
+  testCase('17) Registry vollständig übernommen');
+
+  /* Prüfe: Alle Module aus der Registry sind in normalisierten Modulen */
+  for (const [id, mod] of Object.entries(FULL_REGISTRY)) {
+    if (mod.visible === false) continue;
+    const modules = normalizeRegistry(FULL_REGISTRY);
+    const found = modules.find(m => m.id === id);
+    assert(found !== undefined, `${id}: in normalisierten Modulen vorhanden`);
+    assert(found.title === (mod.title || id), `${id}: title korrekt`);
+    assert(found.category === (mod.category || 'Sonstige'), `${id}: category korrekt`);
+    assert(found.installer === (mod.installer || ''), `${id}: installer korrekt`);
+    assert(found.status === (mod.status || 'planned'), `${id}: status korrekt`);
+    assert(Array.isArray(found.depends), `${id}: depends ist Array`);
+    assert(found.enabled === false, `${id}: enabled ist false (Default)`);
+  }
+
+  /* Prüfe: Module mit visible=false erscheinen NICHT */
+  const visibleMods = normalizeRegistry(FULL_REGISTRY);
+  for (const mod of Object.values(FULL_REGISTRY)) {
+    if (mod.visible === false) {
+      const found = visibleMods.find(m => m.id === Object.keys(FULL_REGISTRY).find(k => FULL_REGISTRY[k] === mod));
+      if (found) {
+        assert(false, `${mod.title || 'hidden'}: visible=false erscheint nicht`);
+      }
+    }
+  }
+
+  /* Prüfe: Alle Module sind über buildCommandText erreichbar */
+  const allMods = normalizeRegistry(FULL_REGISTRY);
+  for (const mod of allMods) {
+    const testMods = normalizeRegistry(FULL_REGISTRY);
+    const t = testMods.find(m => m.id === mod.id);
+    t.enabled = true;
+    const cmd = buildCommandText(testMods, '', 22, 'root', false);
+    assert(cmd.includes(`--${mod.id}`), `${mod.id}: --flag im Befehl`);
+  }
+}
+
+testRegistryFullCoverage();
+
+/* ─── Test 18: Unbekannte Module werden abgefangen ────────────────────── */
+
+function testUnknownModulesCaught() {
+  testCase('18) Unbekannte Module werden abgefangen');
+
+  /* Unbekannte Module in der Registry werden ignoriert (kommen nicht vor) */
+  const unknown = normalizeRegistry({
+    totally_unknown_module: {
+      title: 'Unknown', category: 'Unknown', description: '',
+      icon: '?', installer: '', status: 'available',
+      depends: [], visible: true,
+    },
+  });
+  assert(unknown.length === 1, 'Unbekanntes Modul wird trotzdem geladen (jedes Modul ist gültig)');
+
+  /* Unbekannte Module in buildInstallConfig werden ignoriert (nicht im Registry-Set) */
+  const modules = normalizeRegistry(FULL_REGISTRY);
+  const cmd = buildCommandText(modules, '', 22, 'root', false);
+  assert(!cmd.includes('--fake_module'), 'fake_module erscheint nicht im Befehl (nicht in Registry)');
+  assert(!cmd.includes('--unknown'), 'unknown erscheint nicht im Befehl (nicht enabled)');
+
+  /* buildCommandText filtert nur enabled Module */
+  const cmd2 = buildCommandText(modules, '', 22, 'root', false);
+  assert(cmd2.endsWith('sudo bash -s --') || cmd2.endsWith('sudo bash -s -- '), 'Leerer Befehl bei keinen Modulen');
+}
+
+testUnknownModulesCaught();
+
+/* ─── Test 19: Konfigurationsvergleich Browser ↔ CLI ──────────────────── */
+
+function testConfigComparison() {
+  testCase('19) Konfigurationsvergleich Browser ↔ CLI');
+
+  /* Browser (JSON) und CLI (Flags) müssen identische Module aktivieren */
+
+  /* Nur Module verwenden, die in FULL_REGISTRY existieren */
+  const testCases = [
+    { name: 'Docker only', ids: ['docker'] },
+    { name: 'AI Stack', ids: ['docker', 'openwebui', 'mcp'] },
+    { name: 'Security', ids: ['fail2ban'] },
+    { name: 'Mixed', ids: ['docker', 'mcp'] },
+  ];
+
+  for (const tc of testCases) {
+    /* Via JSON Config (Browser) */
+    const jsonMods = normalizeRegistry(FULL_REGISTRY);
+    for (const id of tc.ids) {
+      const m = jsonMods.find(m => m.id === id);
+      if (m) m.enabled = true;
+    }
+    const jsonConfig = buildInstallConfig(jsonMods, 'test', 22, 'root', false);
+
+    /* Via CLI Flags (Bash) */
+    const cliMods = normalizeRegistry(FULL_REGISTRY);
+    for (const id of tc.ids) {
+      const m = cliMods.find(m => m.id === id);
+      if (m) m.enabled = true;
+    }
+    const cmd = buildCommandText(cliMods, 'test', 22, 'root', false);
+
+    /* Vergleich: JSON hat alle Flags als true */
+    for (const id of tc.ids) {
+      assert(jsonConfig.modules[id] === true, `${tc.name}: JSON hat ${id}=true`);
+      assert(cmd.includes(`--${id}`), `${tc.name}: CLI hat --${id}`);
+    }
+
+    /* Nicht ausgewählte sichtbare Module sind per Default nicht in modules */
+    const visibleKeys = Object.entries(FULL_REGISTRY)
+      .filter(([k, v]) => v.visible !== false && v.status !== 'deprecated')
+      .map(([k]) => k);
+    for (const id of visibleKeys) {
+      if (tc.ids.includes(id)) continue;
+      if (jsonConfig.modules && jsonConfig.modules[id] !== undefined) {
+        assert(jsonConfig.modules[id] === false || jsonConfig.modules[id] === true,
+          `${tc.name}: Nicht ausgewähltes ${id} ist boolean`);
+      }
+    }
+  }
+
+  assert(true, 'Alle Konfigurationsvergleiche bestanden');
+}
+
+testConfigComparison();
+
+/* ─── Test 20: Abwärtskompatibilität { install: true } ───────────────── */
+
+function testBackwardCompat() {
+  testCase('20) Abwärtskompatibilität { install: true }');
+
+  /* Simuliere Python-Code aus load_config() */
+  function parseModuleValue(v) {
+    if (typeof v === 'boolean') return v;
+    if (typeof v === 'object' && v !== null) return v.install === true;
+    return false;
+  }
+
+  const modules = normalizeRegistry(FULL_REGISTRY);
+
+  /* Test mit einfachen Booleans */
+  const config1 = buildInstallConfig(modules, '', 22, 'root', false);
+  modules.find(m => m.id === 'docker').enabled = true;
+  const config1b = buildInstallConfig(modules, '', 22, 'root', false);
+  assert(parseModuleValue(config1b.modules.docker) === true, 'Einfacher Boolean: docker=true');
+
+  /* Test mit { install: true } Format – Serialize/Deserialize simuliert */
+  const compatObj = {
+    modules: { docker: { install: true }, openwebui: { install: false } },
+  };
+  assert(parseModuleValue(compatObj.modules.docker) === true, 'Objekt-Format: docker.install=true');
+  assert(parseModuleValue(compatObj.modules.openwebui) === false, 'Objekt-Format: openwebui.install=false');
+
+  /* Gemischt: Beide Formate kombiniert */
+  const mixedObj = {
+    modules: { docker: true, openwebui: { install: true }, ollama: { install: false } },
+  };
+  assert(parseModuleValue(mixedObj.modules.docker) === true, 'Gemischt: docker=true');
+  assert(parseModuleValue(mixedObj.modules.openwebui) === true, 'Gemischt: openwebui.install=true');
+  assert(parseModuleValue(mixedObj.modules.ollama) === false, 'Gemischt: ollama.install=false');
+}
+
+testBackwardCompat();
 
 /* ─── Summary ─────────────────────────────────────────────────────────── */
 

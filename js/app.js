@@ -116,7 +116,7 @@ const App = (() => {
     const enabledIds = state.modules.filter(m => m.enabled).map(m => m.id);
     const modules = {};
     for (const id of enabledIds) {
-      modules[id] = { install: true };
+      modules[id] = true;
     }
     return {
       hostname: state.hostname || null,

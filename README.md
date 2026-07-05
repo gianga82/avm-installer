@@ -67,6 +67,97 @@ Die Seite reagiert auf jede Eingabe ohne Reload:
 3. **JSON** anzeigen, kopieren oder als `install_config.json` herunterladen
 4. **Befehl** kopieren oder als `.sh`-Script herunterladen
 
+## Web → Bootstrap → Installation
+
+### Ablaufdiagramm
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Browser (Web-Installer)                                    │
+│                                                             │
+│  index.html                                                 │
+│    ├── js/api.js ──── lädt ───► config/module_registry.json │
+│    ├── js/app.js ──── baut ───► getInstallConfig()          │
+│    ├── js/ui.js  ──── zeigt   (Server + Module)             │
+│    └── js/installer.js                                      │
+│          ├── buildCommand()  → curl-Befehl                  │
+│          └── buildJSON()     → install_config.json           │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+              ┌────────────┴────────────┐
+              ▼                        ▼
+  curl ... | bash            download
+  (sofort ausführen)         install_config.json
+              │                        │
+              └────────────┬───────────┘
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Server (install.sh)                                        │
+│                                                             │
+│  1. parse_args() oder load_config()                         │
+│     └── Liest --flags oder install_config.json              │
+│         (beide Formate: "modul": true oder                  │
+│          "modul": { "install": true })                      │
+│                                                             │
+│  2. load_registry()                                         │
+│     └── Liest config/module_registry.json                   │
+│         (selbe Datei wie der Web-Installer!)                │
+│                                                             │
+│  3. ensure_main_repo()                                      │
+│     └── Klont ai-vps-manager nach /opt/avm                  │
+│                                                             │
+│  4. source lib/module_manager.sh                            │
+│     └── Lädt Modul-Manager aus dem geklonten Repo           │
+│                                                             │
+│  5. resolve_dependencies()                                  │
+│     └── Aktiviert Abhängigkeiten (docker→openwebui, …)      │
+│                                                             │
+│  6. Für jedes aktivierte Modul:                             │
+│     ├── check_module_status() – available/experimental/…    │
+│     ├── module_exists()      – Prüft module.conf            │
+│     └── run_module_action()  – Führt install.sh aus         │
+│                                                             │
+│  7. Firewall konfigurieren (UFW)                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Konfigurationslogik
+
+**Es gibt nur noch eine Konfigurationslogik.**
+
+Sowohl der Web-Installer (JavaScript) als auch der Bash-Installer (`install.sh`)
+verwenden dieselbe Quelle für Modulnamen und -metadaten:
+
+| Komponente             | Quelle                        |
+|------------------------|-------------------------------|
+| Modulnamen             | `config/module_registry.json` |
+| Kategorie              | `category`-Feld               |
+| Status                 | `status`-Feld                 |
+| Abhängigkeiten         | `depends`-Feld                |
+| Installer-Pfad         | `installer`-Feld              |
+| Server-Konfiguration   | CLI-Flags / `install_config.json` |
+
+### Format-Kompatibilität
+
+`install_config.json` wird von beiden Welten gleich verstanden:
+
+```json
+{
+  "hostname": "myserver",
+  "ssh_port": 2222,
+  "user": "admin",
+  "auto_update": true,
+  "modules": {
+    "docker": true,
+    "openwebui": true
+  }
+}
+```
+
+Das Bash-Script unterstützt **beide Formate** aus Gründen der Rückwärtskompatibilität:
+- `"modul": true` – einfacher Boolean
+- `"modul": { "install": true }` – Objekt-Format (generiert von älteren Web-Versionen)
+
 ## Entwicklung
 
 ```bash
