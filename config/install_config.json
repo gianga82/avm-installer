@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "hostname": "",
+  "ssh_port": 22,
+  "user": "root",
+  "auto_update": false,
+  "modules": {
+    "docker": false,
+    "docker_compose": false,
+    "mcp": false,
+    "opencode": false,
+    "ollama": false,
+    "openwebui": false,
+    "nginx_proxy_manager": false,
+    "tailscale": false,
+    "watchtower": false,
+    "monitoring": false
+  }
+}

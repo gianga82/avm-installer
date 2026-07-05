@@ -1,0 +1,182 @@
+{
+  "docker": {
+    "title": "Docker",
+    "category": "Server",
+    "description": "Docker Engine inkl. Compose Plugin",
+    "icon": "\ud83d\udc33",
+    "installer": "server/docker",
+    "status": "available",
+    "depends": [],
+    "visible": true
+  },
+  "docker_compose": {
+    "title": "Docker Compose",
+    "category": "Server",
+    "description": "Docker Compose Plugin (wird mit Docker installiert)",
+    "icon": "\u2699\ufe0f",
+    "installer": "server/docker",
+    "status": "available",
+    "depends": ["docker"],
+    "visible": true
+  },
+  "mcp": {
+    "title": "MCP Server",
+    "category": "AI",
+    "description": "Model Context Protocol Server",
+    "icon": "\ud83d\udd0c",
+    "installer": "",
+    "status": "experimental",
+    "depends": [],
+    "visible": true
+  },
+  "opencode": {
+    "title": "OpenCode",
+    "category": "AI",
+    "description": "AI Coding Assistant (CLI + MCP)",
+    "icon": "\ud83e\udd16",
+    "installer": "ai/opencode",
+    "status": "available",
+    "depends": [],
+    "visible": true
+  },
+  "ollama": {
+    "title": "Ollama",
+    "category": "AI",
+    "description": "Lokale LLM Runtime",
+    "icon": "\ud83e\udd99",
+    "installer": "ai/ollama",
+    "status": "available",
+    "depends": [],
+    "visible": true
+  },
+  "openwebui": {
+    "title": "Open WebUI",
+    "category": "AI",
+    "description": "Web-Oberfl\u00e4che f\u00fcr Ollama",
+    "icon": "\ud83c\udf10",
+    "installer": "ai/openwebui",
+    "status": "available",
+    "depends": ["docker"],
+    "visible": true
+  },
+  "nginx_proxy_manager": {
+    "title": "Nginx Proxy Manager",
+    "category": "Server",
+    "description": "Reverse Proxy mit Web-UI",
+    "icon": "\ud83d\udd04",
+    "installer": "",
+    "status": "planned",
+    "depends": ["docker"],
+    "visible": true
+  },
+  "tailscale": {
+    "title": "Tailscale",
+    "category": "Networking",
+    "description": "Sicheres VPN/Mesh-Netzwerk",
+    "icon": "\ud83d\udd12",
+    "installer": "",
+    "status": "planned",
+    "depends": [],
+    "visible": true
+  },
+  "watchtower": {
+    "title": "Watchtower",
+    "category": "Monitoring",
+    "description": "Automatische Docker-Container-Updates",
+    "icon": "\ud83d\udc40",
+    "installer": "",
+    "status": "planned",
+    "depends": ["docker"],
+    "visible": true
+  },
+  "monitoring": {
+    "title": "Monitoring Stack",
+    "category": "Monitoring",
+    "description": "System- und Container-\u00dcberwachung (Prometheus + Grafana)",
+    "icon": "\ud83d\udcca",
+    "installer": "",
+    "status": "planned",
+    "depends": [],
+    "visible": true
+  },
+  "crowdsec": {
+    "title": "CrowdSec",
+    "category": "Security",
+    "description": "Intrusion Detection & Prevention System",
+    "icon": "\ud83d\udee1\ufe0f",
+    "installer": "",
+    "status": "experimental",
+    "depends": [],
+    "visible": true
+  },
+  "fail2ban": {
+    "title": "Fail2Ban",
+    "category": "Security",
+    "description": "Brute-Force-Schutz f\u00fcr SSH und Dienste",
+    "icon": "\ud83d\udea8",
+    "installer": "",
+    "status": "available",
+    "depends": [],
+    "visible": true
+  },
+  "netdata": {
+    "title": "Netdata",
+    "category": "Monitoring",
+    "description": "Echtzeit-Monitoring mit sch\u00f6nen Dashboards",
+    "icon": "\ud83d\udcca",
+    "installer": "",
+    "status": "available",
+    "depends": [],
+    "visible": true
+  },
+  "wireguard": {
+    "title": "WireGuard",
+    "category": "Networking",
+    "description": "Schnelles VPN mit moderner Kryptografie",
+    "icon": "\ud83d\udd10",
+    "installer": "",
+    "status": "planned",
+    "depends": [],
+    "visible": true
+  },
+  "portainer": {
+    "title": "Portainer",
+    "category": "Server",
+    "description": "Docker-Web-UI zur Container-Verwaltung",
+    "icon": "\ud83d\udee0\ufe0f",
+    "installer": "",
+    "status": "experimental",
+    "depends": ["docker"],
+    "visible": true
+  },
+  "cloudflare_tunnel": {
+    "title": "Cloudflare Tunnel",
+    "category": "Networking",
+    "description": "Sicherer Tunnel ohne \u00f6ffentliche IP",
+    "icon": "\u2601\ufe0f",
+    "installer": "",
+    "status": "experimental",
+    "depends": [],
+    "visible": true
+  },
+  "test_deprecated_mod": {
+    "title": "Altes Modul",
+    "category": "Sonstige",
+    "description": "Veraltetes Testmodul (wird nicht installiert)",
+    "icon": "\u26a0\ufe0f",
+    "installer": "",
+    "status": "deprecated",
+    "depends": [],
+    "visible": true
+  },
+  "test_hidden_mod": {
+    "title": "Verstecktes Modul",
+    "category": "Sonstige",
+    "description": "Dieses Modul wird auf der Seite nicht angezeigt",
+    "icon": "\ud83d\udc40",
+    "installer": "",
+    "status": "available",
+    "depends": [],
+    "visible": false
+  }
+}

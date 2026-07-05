@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 320" fill="none">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3b82f6" stop-opacity="0.3"/><stop offset="100%" stop-color="#06b6d4" stop-opacity="0.1"/></linearGradient>
+  </defs>
+  <rect width="400" height="320" rx="16" fill="url(#g1)"/>
+  <rect x="60" y="100" width="160" height="120" rx="12" fill="#1a2236" stroke="#2d3a52" stroke-width="1.5"/>
+  <rect x="70" y="110" width="40" height="20" rx="4" fill="#3b82f6"/>
+  <rect x="120" y="110" width="40" height="20" rx="4" fill="#1a2236" stroke="#2d3a52" stroke-width="1"/>
+  <rect x="170" y="110" width="40" height="20" rx="4" fill="#1a2236" stroke="#2d3a52" stroke-width="1"/>
+  <rect x="70" y="140" width="140" height="6" rx="3" fill="#2d3a52"/>
+  <rect x="70" y="155" width="140" height="6" rx="3" fill="#2d3a52"/>
+  <rect x="70" y="170" width="100" height="6" rx="3" fill="#2d3a52"/>
+  <rect x="70" y="190" width="60" height="16" rx="4" fill="#3b82f6"/>
+  <rect x="180" y="100" width="120" height="120" rx="12" fill="#1a2236" stroke="#2d3a52" stroke-width="1.5"/>
+  <circle cx="240" cy="130" r="20" fill="#3b82f6" opacity="0.15"/>
+  <circle cx="240" cy="130" r="10" fill="#3b82f6" opacity="0.3"/>
+  <circle cx="240" cy="130" r="4" fill="#06b6d4"/>
+  <path d="M220 150c0-15 10-25 20-25s20 10 20 25" stroke="#06b6d4" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <rect x="190" y="165" width="100" height="6" rx="3" fill="#2d3a52"/>
+  <rect x="190" y="180" width="80" height="6" rx="3" fill="#2d3a52"/>
+  <rect x="190" y="195" width="60" height="6" rx="3" fill="#2d3a52"/>
+  <circle cx="120" cy="260" r="8" fill="#22c55e" opacity="0.5"/>
+  <circle cx="190" cy="250" r="6" fill="#3b82f6" opacity="0.5"/>
+  <circle cx="260" cy="255" r="7" fill="#06b6d4" opacity="0.5"/>
+  <circle cx="320" cy="245" r="5" fill="#22c55e" opacity="0.4"/>
+  <path d="M120 260 L160 255 L200 248 L250 252 L300 245" stroke="#3b82f6" stroke-width="1.5" fill="none" opacity="0.3"/>
+</svg>

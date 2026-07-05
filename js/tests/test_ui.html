@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>UI Test Suite – Dynamic Module Registry</title>
+<style>
+  body { font-family: monospace; background: #111; color: #eee; padding: 20px; }
+  h2 { color: #38bdf8; }
+  .pass { color: #22c55e; }
+  .fail { color: #ef4444; }
+  .summary { margin-top: 24px; padding: 12px; border-top: 1px solid #333; font-weight: bold; }
+  pre { background: #1e293b; padding: 8px; border-radius: 4px; overflow-x: auto; }
+  .test-case { margin-bottom: 20px; }
+  .test-case h3 { margin: 8px 0; }
+</style>
+</head>
+<body>
+<h1>UI Test Suite – Dynamic Module Registry</h1>
+
+<div id="output"></div>
+
+<script>
+'use strict';
+
+/* ─── Mini Test Runner ────────────────────────────────────────────────── */
+const output = document.getElementById('output');
+const results = { pass: 0, fail: 0 };
+
+function testCase(name) {
+  const div = document.createElement('div');
+  div.className = 'test-case';
+  div.innerHTML = `<h3>${name}</h3>`;
+  output.appendChild(div);
+  return div;
+}
+
+function assert(condition, msg, container) {
+  const p = document.createElement('pre');
+  if (condition) {
+    p.className = 'pass';
+    p.textContent = '\u2713 PASS: ' + msg;
+    results.pass++;
+  } else {
+    p.className = 'fail';
+    p.textContent = '\u2717 FAIL: ' + msg;
+    results.fail++;
+  }
+  container.appendChild(p);
+}
+
+/* ─── Pure Logic Replica (same as in app.js/ui.js) ────────────────────── */
+
+const CATEGORY_ORDER = ['Server', 'AI', 'Networking', 'Monitoring', 'Security', 'Sonstige'];
+const STATUS_LABELS = {
+  available: 'Available',
+  experimental: 'Experimental',
+  planned: 'Planned',
+  deprecated: 'Deprecated',
+};
+
+/* Helper: filter visible + normalize registry data */
+function normalizeRegistry(data) {
+  if (!data || typeof data !== 'object') return [];
+  const modules = [];
+  for (const [id, mod] of Object.entries(data)) {
+    if (mod.visible === false) continue;
+    modules.push({
+      id,
+      title: mod.title || id,
+      category: mod.category || 'Sonstige',
+      description: mod.description || '',
+      icon: mod.icon || '\u2753',
+      installer: mod.installer || '',
+      status: mod.status || 'planned',
+      depends: Array.isArray(mod.depends) ? mod.depends : [],
+      visible: mod.visible !== false,
+      enabled: false,
+    });
+  }
+  return modules;
+}
+
+/* Dependency resolution */
+function resolveDeps(modules) {
+  const enabledIds = new Set(modules.filter(m => m.enabled).map(m => m.id));
+  const autoDepIds = new Set();
+  for (const mod of modules) {
+    if (!mod.enabled) continue;
+    for (const depId of mod.depends) {
+      if (!enabledIds.has(depId)) autoDepIds.add(depId);
+    }
+  }
+  return autoDepIds;
+}
+
+function getEnabledModules(modules) {
+  const explicitly = modules.filter(m => m.enabled);
+  const auto = [];
+  for (const mod of explicitly) {
+    for (const depId of mod.depends) {
+      if (!explicitly.find(m => m.id === depId) && !auto.find(m => m.id === depId)) {
+        const depMod = modules.find(m => m.id === depId);
+        if (depMod) auto.push({ ...depMod, enabled: true, autoActivated: true });
+      }
+    }
+  }
+  return [...explicitly, ...auto];
+}
+
+/* Category grouping */
+function groupByCategory(modules) {
+  const categories = {};
+  for (const mod of modules) {
+    if (!categories[mod.category]) categories[mod.category] = [];
+    categories[mod.category].push(mod);
+  }
+  const ordered = [];
+  for (const cat of CATEGORY_ORDER) {
+    if (categories[cat]) ordered.push({ category: cat, modules: categories[cat] });
+  }
+  return ordered;
+}
+
+/* Status counts */
+function getStatusCounts(modules) {
+  const counts = { available: 0, experimental: 0, planned: 0, deprecated: 0 };
+  for (const m of modules) {
+    if (counts[m.status] !== undefined) counts[m.status]++;
+  }
+  return counts;
+}
+
+/* ─── Test Data ───────────────────────────────────────────────────────── */
+
+const FULL_REGISTRY = {
+  "docker": {
+    "title": "Docker",
+    "category": "Server",
+    "description": "Docker Engine",
+    "icon": "\ud83d\udc33",
+    "installer": "server/docker",
+    "status": "available",
+    "depends": [],
+    "visible": true
+  },
+  "openwebui": {
+    "title": "Open WebUI",
+    "category": "AI",
+    "description": "Web UI for Ollama",
+    "icon": "\ud83c\udf10",
+    "installer": "ai/openwebui",
+    "status": "available",
+    "depends": ["docker"],
+    "visible": true
+  },
+  "mcp": {
+    "title": "MCP Server",
+    "category": "AI",
+    "description": "Model Context Protocol",
+    "icon": "\ud83d\udd0c",
+    "installer": "",
+    "status": "experimental",
+    "depends": [],
+    "visible": true
+  },
+  "nginx_proxy_manager": {
+    "title": "Nginx Proxy Manager",
+    "category": "Server",
+    "description": "Reverse Proxy",
+    "icon": "\ud83d\udd04",
+    "installer": "",
+    "status": "planned",
+    "depends": ["docker"],
+    "visible": true
+  },
+  "test_deprecated_mod": {
+    "title": "Old Module",
+    "category": "Sonstige",
+    "description": "Deprecated test",
+    "icon": "\u26a0\ufe0f",
+    "installer": "",
+    "status": "deprecated",
+    "depends": [],
+    "visible": true
+  },
+  "test_hidden_mod": {
+    "title": "Hidden Module",
+    "category": "Sonstige",
+    "description": "Should not appear",
+    "icon": "\ud83d\udc40",
+    "installer": "",
+    "status": "available",
+    "depends": [],
+    "visible": false
+  },
+  "fail2ban": {
+    "title": "Fail2Ban",
+    "category": "Security",
+    "description": "Brute-force protection",
+    "icon": "\ud83d\udea8",
+    "installer": "",
+    "status": "available",
+    "depends": [],
+    "visible": true
+  }
+};
+
+/* ─── Test 1: Registry leer ───────────────────────────────────────────── */
+(function() {
+  const tc = testCase('1) Registry leer');
+  const result = normalizeRegistry(null);
+  assert(Array.isArray(result), 'null => Array', tc);
+  assert(result.length === 0, 'null => leeres Array', tc);
+
+  const result2 = normalizeRegistry({});
+  assert(Array.isArray(result2), '{} => Array', tc);
+  assert(result2.length === 0, '{} => leeres Array', tc);
+})();
+
+/* ─── Test 2: Unbekannter Status ──────────────────────────────────────── */
+(function() {
+  const tc = testCase('2) Unbekannter Status');
+  const reg = {
+    "test_mod": {
+      "title": "Test",
+      "category": "Server",
+      "description": "Test",
+      "icon": "\u2753",
+      "installer": "",
+      "status": "unknown_status_xyz",
+      "depends": [],
+      "visible": true
+    }
+  };
+  const modules = normalizeRegistry(reg);
+  assert(modules.length === 1, 'Modul mit unbekanntem Status wird geladen', tc);
+  assert(modules[0].status === 'unknown_status_xyz', 'Status bleibt erhalten', tc);
+  assert(modules[0].enabled === false, 'Standard enabled = false', tc);
+})();
+
+/* ─── Test 3: Fehlende Kategorie ──────────────────────────────────────── */
+(function() {
+  const tc = testCase('3) Fehlende Kategorie');
+  const reg = {
+    "no_cat_mod": {
+      "title": "No Category",
+      "description": "Test",
+      "icon": "\u2753",
+      "installer": "",
+      "status": "available",
+      "depends": [],
+      "visible": true
+    }
+  };
+  const modules = normalizeRegistry(reg);
+  assert(modules.length === 1, 'Modul ohne category wird geladen', tc);
+  assert(modules[0].category === 'Sonstige', 'Fallback-Kategorie = Sonstige', tc);
+
+  const grouped = groupByCategory(modules);
+  assert(grouped.length === 1, 'Wird unter Sonstige gruppiert', tc);
+  assert(grouped[0].category === 'Sonstige', 'Gruppe = Sonstige', tc);
+})();
+
+/* ─── Test 4: Fehlender Installer ─────────────────────────────────────── */
+(function() {
+  const tc = testCase('4) Fehlender Installer');
+  const reg = {
+    "no_inst_mod": {
+      "title": "No Installer",
+      "category": "AI",
+      "description": "Test",
+      "icon": "\u2753",
+      "status": "available",
+      "depends": [],
+      "visible": true
+    }
+  };
+  const modules = normalizeRegistry(reg);
+  assert(modules.length === 1, 'Modul ohne installer wird geladen', tc);
+  assert(modules[0].installer === '', 'Fehlender installer = Leerstring', tc);
+})();
+
+/* ─── Test 5: Hidden Module ───────────────────────────────────────────── */
+(function() {
+  const tc = testCase('5) Hidden Module (visible=false)');
+  const modules = normalizeRegistry(FULL_REGISTRY);
+  const hidden = modules.find(m => m.id === 'test_hidden_mod');
+  assert(!hidden, 'test_hidden_mod erscheint nicht in normalisierten Modulen', tc);
+  assert(modules.length === 6, '6 sichtbare Module (von 7, 1 hidden)', tc);
+})();
+
+/* ─── Test 6: Dependencies ────────────────────────────────────────────── */
+(function() {
+  const tc = testCase('6) Dependencies');
+  const modules = normalizeRegistry(FULL_REGISTRY);
+
+  /* enable openwebui – should auto-enable docker */
+  const owui = modules.find(m => m.id === 'openwebui');
+  owui.enabled = true;
+
+  const autoDepIds = resolveDeps(modules);
+  assert(autoDepIds.has('docker'), 'docker wird als Auto-Dep erkannt', tc);
+  assert(!autoDepIds.has('openwebui'), 'openwebui ist nicht auto-dep', tc);
+
+  const enabled = getEnabledModules(modules);
+  const autoDocker = enabled.find(m => m.id === 'docker');
+  assert(autoDocker, 'docker ist in enabled-Modulen', tc);
+  assert(autoDocker.autoActivated === true, 'docker ist als autoActivated markiert', tc);
+
+  const explicitOwui = enabled.find(m => m.id === 'openwebui');
+  assert(explicitOwui, 'openwebui ist in enabled-Modulen', tc);
+  assert(!explicitOwui.autoActivated, 'openwebui ist nicht autoActivated', tc);
+})();
+
+/* ─── Test 7: Experimentelle Module ───────────────────────────────────── */
+(function() {
+  const tc = testCase('7) Experimentelle Module');
+  const modules = normalizeRegistry(FULL_REGISTRY);
+  const mcp = modules.find(m => m.id === 'mcp');
+  assert(mcp, 'MCP Server ist geladen', tc);
+  assert(mcp.status === 'experimental', 'MCP Server Status = experimental', tc);
+
+  mcp.enabled = true;
+  const autoDepIds = resolveDeps(modules);
+  assert(autoDepIds.size === 0, 'MCP hat keine Auto-Dependencies', tc);
+
+  const counts = getStatusCounts(modules);
+  assert(counts.experimental >= 1, 'experimental-Zaehler >= 1', tc);
+})();
+
+/* ─── Test 8: Deprecated Module ───────────────────────────────────────── */
+(function() {
+  const tc = testCase('8) Deprecated Module');
+  const modules = normalizeRegistry(FULL_REGISTRY);
+  const depMod = modules.find(m => m.id === 'test_deprecated_mod');
+  assert(depMod, 'Deprecated Modul ist geladen', tc);
+  assert(depMod.status === 'deprecated', 'Status = deprecated', tc);
+  assert(depMod.visible === true, 'visible = true (angezeigt aber deaktiviert)', tc);
+
+  const counts = getStatusCounts(modules);
+  assert(counts.deprecated >= 1, 'deprecated-Zaehler >= 1', tc);
+})();
+
+/* ─── Extra: Category Grouping ────────────────────────────────────────── */
+(function() {
+  const tc = testCase('Extra) Kategorie-Gruppierung');
+  const modules = normalizeRegistry(FULL_REGISTRY);
+  const grouped = groupByCategory(modules);
+  const cats = grouped.map(g => g.category);
+  assert(cats.includes('Server'), 'Enthaelt Server', tc);
+  assert(cats.includes('AI'), 'Enthaelt AI', tc);
+  assert(cats.includes('Security'), 'Enthaelt Security', tc);
+  assert(cats.includes('Sonstige'), 'Enthaelt Sonstige', tc);
+
+  /* Verify order */
+  const idx = {};
+  grouped.forEach((g, i) => { idx[g.category] = i; });
+  assert(idx['Server'] < idx['AI'], 'Server vor AI', tc);
+  assert(idx['AI'] < idx['Security'], 'AI vor Security', tc);
+  assert(idx['Security'] < idx['Sonstige'], 'Security vor Sonstige', tc);
+})();
+
+/* ─── Extra: Multi-Level Dependencies ─────────────────────────────────── */
+(function() {
+  const tc = testCase('Extra) Mehrstufige Dependencies');
+  const modules = normalizeRegistry(FULL_REGISTRY);
+
+  /* nginx depends on docker, and openwebui also depends on docker */
+  const owui = modules.find(m => m.id === 'openwebui');
+  owui.enabled = true;
+  /* Enable nginx too */
+  const nginx = modules.find(m => m.id === 'nginx_proxy_manager');
+  /* nginx is planned, should NOT be enableable */
+
+  const autoDepIds = resolveDeps(modules);
+  assert(autoDepIds.has('docker'), 'docker erkannt (von openwebui)', tc);
+
+  /* docker should be auto-activated */
+  const enabled = getEnabledModules(modules);
+  const dockerAuto = enabled.filter(m => m.autoActivated);
+  assert(dockerAuto.length === 1, 'Genau 1 auto-aktiviertes Modul (docker)', tc);
+  assert(dockerAuto[0].id === 'docker', 'Auto-aktiviert = docker', tc);
+})();
+
+/* ─── Summary ─────────────────────────────────────────────────────────── */
+(function() {
+  const total = results.pass + results.fail;
+  const summary = document.createElement('div');
+  summary.className = 'summary';
+  if (results.fail === 0) {
+    summary.className += ' pass';
+    summary.textContent = `\u2705 ALLE ${total} TESTS BESTANDEN (${results.pass} passed, ${results.fail} failed)`;
+  } else {
+    summary.className += ' fail';
+    summary.textContent = `\u274c ${results.fail} TEST(S) FEHLGESCHLAGEN (${results.pass} passed, ${results.fail} failed von ${total})`;
+  }
+  output.appendChild(summary);
+})();
+</script>
+</body>
+</html>

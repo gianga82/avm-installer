@@ -1,1 +1,155 @@
-# AVM Installer
+# AVM Installer – Web Frontend
+
+Web-Installer für den [AI VPS Manager](https://github.com/gianga82/ai-vps-manager).
+
+👉 **Live**: [gianga82.github.io/avm-installer](https://gianga82.github.io/avm-installer)
+
+## Features
+
+- Dark Theme mit Glas-Effekten (Inter Font, responsive)
+- Module werden dynamisch aus `config/module_registry.json` geladen
+- Keine hartcodierten Modulnamen im HTML/JS
+- 6 Kategorien: Server, AI, Networking, Monitoring, Security, Sonstige
+- Status-System: available, experimental, planned, deprecated
+- Auto-Dependencies: Abhängige Module werden automatisch aktiviert
+- **Live-Konfiguration**: Jede Eingabe aktualisiert sofort Zusammenfassung, JSON und Befehl
+- **JSON-Viewer** mit Syntax-Highlighting (Copy + Download)
+- **Terminal-Viewer** mit vollständigem curl-Befehl (Copy + Download)
+- **Abhängigkeits-Hinweise**: Info bei Auto-Deps, gelbe Warnung bei experimentell, blaue Info bei geplant
+
+## Architektur
+
+```
+index.html              – Einstieg (keine Modul-Daten)
+css/style.css           – Stylesheet
+js/
+  app.js                – State, Registry-Load, Init, renderAll()
+  ui.js                 – Rendering (Cards, Summary, JSON, DepHints, Toasts)
+  installer.js          – Befehlsgenerierung, JSON-Export, Copy, Download
+  api.js                – Registry-Fetch (lokal + GitHub)
+config/
+  module_registry.json  – Single Source of Truth für alle Module
+assets/
+  logo.svg / favicon.ico
+```
+
+## Module Registry
+
+`config/module_registry.json` definiert alle Module:
+
+```json
+{
+  "modul_id": {
+    "title": "Modulname",
+    "category": "Server|AI|Networking|Monitoring|Security|Sonstige",
+    "description": "Kurzbeschreibung",
+    "icon": "🐳",
+    "installer": "pfad/im/installer",
+    "status": "available|experimental|planned|deprecated",
+    "depends": ["dependency_id"],
+    "visible": true
+  }
+}
+```
+
+- `visible: false` – Modul wird auf der Seite nicht angezeigt
+- `deprecated` – Modul wird angezeigt, Checkbox deaktiviert (rot)
+- `planned` – Modul angezeigt, Checkbox deaktiviert (blau)
+- `experimental` – Modul wählbar, gelber Badge
+- `depends` – Abhängigkeiten werden automatisch aktiviert
+
+## Live-Konfiguration
+
+Die Seite reagiert auf jede Eingabe ohne Reload:
+
+1. **Server-Konfiguration** ändern → JSON + Befehl aktualisieren sich
+2. **Modul auswählen** → Zusammenfassung + JSON + Befehl + Hinweise aktualisieren
+3. **JSON** anzeigen, kopieren oder als `install_config.json` herunterladen
+4. **Befehl** kopieren oder als `.sh`-Script herunterladen
+
+## Entwicklung
+
+```bash
+python3 -m http.server 8080
+# http://localhost:8080
+```
+
+## Tests
+
+```bash
+node js/tests/test_ui.js
+# oder browser: open js/tests/test_ui.html
+```
+
+## Build & Release
+
+Das Frontend durchläuft vor der Veröffentlichung einen Build-Prozess:
+
+```
+static/installer/  →  build/installer/  →  avm-installer/ (GitHub Pages)
+     (Quelle)       (build_installer.sh)    (publish_installer.sh)
+```
+
+### Build
+
+```bash
+# Build erzeugen (nur freigegebene Dateien)
+./scripts/build_installer.sh
+```
+
+Ergebnis: `build/installer/` mit validiertem Inhalt und Statistik.
+
+### Veröffentlichen
+
+```bash
+# Build + Sync ins Submodul
+./scripts/publish_installer.sh
+
+# Build + Sync + Commit + Push (im Submodul)
+./scripts/publish_installer.sh --push
+```
+
+### Kurzform (Build + Publish in einem Schritt)
+
+```bash
+./scripts/publish_installer.sh --push
+```
+
+## Deployment (GitHub Pages)
+
+Das Frontend wird über `publish_installer.sh` in das Git-Submodul
+`static/installer/` veröffentlicht.
+
+### Voraussetzungen
+
+- Submodul ist initialisiert:
+  ```bash
+  git submodule update --init static/installer
+  ```
+
+### Verwendung
+
+```bash
+# Build + Sync in Submodul
+./scripts/publish_installer.sh
+
+# Build + Sync + Commit + Push
+./scripts/publish_installer.sh --push
+```
+
+### Was passiert
+
+1. **Build**: Falls `build/installer/` fehlt, wird automatisch `build_installer.sh` ausgeführt
+2. **Validierung**: Prüft Build und Submodul auf Vollständigkeit
+3. **Sync**: Build-Inhalt wird in `static/installer/` synchronisiert (`.git` bleibt erhalten)
+4. **Zusammenfassung**: Dateien, Branch, Repository, Git-Status
+5. **Mit `--push`**: Automatischer Commit + Push **im Submodul** (überspringt bei identischem Stand)
+
+### Ausgeschlossene Dateien
+
+`bootstrap/`, `docs/`, `tests/`, `.github/`, `node_modules/`, `__pycache__/`,
+`*.log`, `*.tmp`, `*.bak`, `*.swp`
+
+## Lizenz
+
+MIT – siehe `LICENSE`.
