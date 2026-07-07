@@ -177,8 +177,9 @@ node js/tests/test_ui.js
 Das Frontend durchläuft vor der Veröffentlichung einen Build-Prozess:
 
 ```
-static/installer/  →  build/installer/  →  avm-installer/ (GitHub Pages)
-     (Quelle)       (build_installer.sh)    (publish_installer.sh)
+static/installer/  →  build/installer/  →  static/installer/  →  GitHub Pages
+     (Quelle)        (build_installer.sh)   (publish_installer.sh)
+                     └── Einzige Filterung    └── Kein Filter – 1:1-Kopie
 ```
 
 ### Build
@@ -232,14 +233,16 @@ Das Frontend wird über `publish_installer.sh` in das Git-Submodul
 
 1. **Build**: Falls `build/installer/` fehlt, wird automatisch `build_installer.sh` ausgeführt
 2. **Validierung**: Prüft Build und Submodul auf Vollständigkeit
-3. **Sync**: Build-Inhalt wird in `static/installer/` synchronisiert (`.git` bleibt erhalten)
+3. **Sync**: Der **gesamte** Build-Inhalt wird nach `static/installer/` synchronisiert (`.git` bleibt erhalten). Es gibt keine zweite Filterung im Publish – `build_installer.sh` definiert als einzige Stelle, welche Dateien ausgeschlossen werden.
 4. **Zusammenfassung**: Dateien, Branch, Repository, Git-Status
 5. **Mit `--push`**: Automatischer Commit + Push **im Submodul** (überspringt bei identischem Stand)
 
-### Ausgeschlossene Dateien
+### Ausschlüsse
 
-`bootstrap/`, `docs/`, `tests/`, `.github/`, `node_modules/`, `__pycache__/`,
-`*.log`, `*.tmp`, `*.bak`, `*.swp`
+Die einzige Filterung findet in `build_installer.sh` statt:
+`.git`, `.github`, `node_modules`, `__pycache__`, `*.log`, `*.tmp`
+
+Neue Ordner wie `bootstrap/`, `docs/` oder zukünftige Erweiterungen werden **automatisch** ohne Codeänderung übernommen.
 
 ## Lizenz
 
