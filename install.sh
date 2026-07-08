@@ -48,6 +48,7 @@ _log() { echo "[$(date +%s)] $*" >&2; }
 # ─── Registry laden ─────────────────────────────────────────────────────────
 
 declare -A REG_TITLE REG_CATEGORY REG_INSTALLER REG_STATUS REG_DEPENDS REG_VISIBLE
+REGISTRY_KEYS=()
 
 load_registry() {
     local reg_file="${1:-${REGISTRY_PATH}}"
@@ -619,6 +620,12 @@ main() {
       run_legacy_cli
       local exit_code=$?
     else
+      if [ -n "${AVM_BOOTSTRAP:-}" ]; then
+        echo -e " ${CROSS} ${RED}Bereits über Bootstrap gestartet – keine Installationsparameter übergeben.${NC}"
+        echo -e " ${INFO_SYM} ${CYAN}Bitte mit --docker, --config <datei> o.ä. aufrufen.${NC}"
+        echo -e " ${INFO_SYM} ${CYAN}Beispiel: bash install.sh --docker --openwebui${NC}"
+        exit 1
+      fi
       echo -e " ${INFO_SYM} ${CYAN}Keine Installationsparameter – leite an Bootstrap weiter …${NC}"
       echo ""
 

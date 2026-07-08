@@ -207,6 +207,8 @@ EOF
 
 # ─── Einstiegspunkt ─────────────────────────────────────────────────────────
 main() {
+  export AVM_BOOTSTRAP=1
+
   echo ""
   echo -e "${CYAN}╔══════════════════════════════════════════════════════════╗${NC}"
   echo -e "${CYAN}║${NC}       ${BOLD}AI VPS Manager – Bootstrap v${BOOTSTRAP_VERSION}${NC}           ${CYAN}║${NC}"
@@ -231,12 +233,19 @@ main() {
   if [ $# -eq 0 ]; then
     show_system_info
     confirm_interactive || exit 1
-    run_installer
-    local exit_code=$?
-  else
-    run_installer "$@"
-    local exit_code=$?
+    echo -e " ${CHECK} ${GREEN}Bootstrap abgeschlossen.${NC}"
+    echo -e " ${INFO_SYM} ${CYAN}Keine Module ausgewählt.${NC}"
+    echo ""
+    echo -e " ${INFO_SYM} ${CYAN}Installation mit Standard-Modulen:${NC}"
+    echo -e "    curl -fsSL ${BASE_URL}/bootstrap/bootstrap.sh | sudo bash -s -- --docker --opencode --ollama --fail2ban --netdata --auto-update"
+    echo ""
+    echo -e " ${INFO_SYM} ${CYAN}Alle Optionen anzeigen:${NC}"
+    echo -e "    bash install.sh --help"
+    exit 0
   fi
+
+  run_installer "$@"
+  local exit_code=$?
 
   case "${exit_code}" in
     0)  echo -e "\n${GREEN}Bootstrap erfolgreich.${NC}" ;;
